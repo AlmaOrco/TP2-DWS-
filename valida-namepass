@@ -1,45 +1,111 @@
 #!/usr/bin/perl -w
 use CGI;
 use Redis;
-$redis = new Redis;
+sub conectarRedis();
+
+eval { conectarRedis() };
+if($@) {
+    $query = new CGI;
+    print $query->header(-charset => 'utf-8');
+    print $query->start_html('Log In');
+    print $query->h3('Lo sentimos la Aplicación está en mantenimiento');
+    print $query->end_html;
+    exit;
+    #die "Ohhh algo no va! [$@]\n";
+}
+
 $query = new CGI;
-$log=0;
-print $cgi->header(-charset => 'utf-8');
+
+
+## no hace falta cuando usas CGI module ##
+print $query->header(-charset => 'utf-8');
+
 print $query->start_html('Log In');
-if ($query->param('name')) {
+$mode = $query->param('mode');
+if ($mode eq 'Log In') {
 	$yourName = $query->param('name'); #nombre introducido en formulario.
 	@listNames = $redis->hkeys('namepass'); #obtiene las keys del hash namepass, previamente creado*.
 	$success = 0; #Esta variable podría ser booleana. (queda por investigar su uso en perl.)
 	
 	foreach $name(@listNames){
 		if($name eq $yourName){
-			$success = 1; 
+                        # check passwd
+	                $yourPasswd = $query->param('password');
+                        if($redis->hget('namepass',$yourName) eq $yourPasswd) {
+			  $success = 1; 
+                        }
 		}
 	}
 
 	if($success == 1){
-	      print $query->h3('Bienvenido: ' . $yourName); #Pendiente añadir aquí la comprobación de la contraseña.
+	      print $query->h3('Bienvenido: ' . $yourName); 
 	} else {
-	      print $query->h3('Lo sentimos! ');
-	      print $query->h4('El usuario ' . $yourName . ' no está registrado');
+	      print $query->h3('Lo sentimos!');
+#	      print $query->h4('El usuario ' . $yourName . ' no está registrado');
+	      print $query->h4('usuario/password incorrectos');
 	}
 }
+
+if ($mode eq 'Log Up') {
+	$yourName = $query->param('name'); #nombre introducido en formulario.
+	@listNames = $redis->hkeys('namepass'); #obtiene las keys del hash namepass, previamente creado*.
+	$success = 1; #Esta variable podría ser booleana. (queda por investigar su uso en perl.)
+	
+	foreach $name(@listNames){
+		if($name eq $yourName){
+			#nombre ocupado.
+			$success = 0;      
+		}
+	}
+
+	if($success == 1){
+		#TODO insertar nombre en redis.
+	      print $query->h3('Bienvenido: ' . $yourName); 
+	} else {
+	      print $query->h3('Lo sentimos!');
+	      print $query->h4('Elija otro nombre de usuario');
+	} #Aún quedan cosas que desarrollar en este bloque.
+	#La idea es separar el formulario de registro del de identificación.
+}
+
 if (!$query->param) {
-            print $query->start_form;
+        print $query->start_form;
+
 	    print $query->p('Nombre');
 	    print $query->textfield(-name=>'name',
                 -size=>35,
                 -maxlength=>50,
-		required);
+		-required, #Esta línea impide que se pueda enviar el formulario con esta línea en blanco.
+		);
+
 	    print $query->p('Password');
             print $query->password_field(-name=>'password',
                 -size=>35,
                 -maxlength=>50,
-		required);
+		-required,
+		);
+
+            print $query->br;
+	
+	#Quería implementar esto con radiobutton, pero no he encontrado el código correcto para hacerlo.
+	    print $query->p('New here?');
+	    print $query->scrolling_list(-name=>'mode',
+				 -values=>['Log In',
+					   'Log Up'],
+				 -size=>2,
+				 -multiple=>'false',
+				 -default=>'Log In');
+
             print $query->br;
             print $query->submit(-value=>'Log In');
+
             print $query->end_form;
 }
+
 print $query->end_html;
 
 #* Queda pendiente controlar la creación del hash en Redis en caso de que no exista.
+# IDEA: comprobar que redis está funcionando lanzando ping.
+sub conectarRedis() {
+  $redis = new Redis;
+};
